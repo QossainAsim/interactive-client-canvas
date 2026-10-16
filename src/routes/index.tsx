@@ -27,10 +27,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { projects, type Project } from "@/lib/portfolio";
-import { sendProjectEnquiry } from "@/lib/contact.functions";
 import { getSiteMetadata } from "@/lib/site.functions";
 import { ProjectPreview } from "@/components/project-preview";
 import { Testimonials } from "@/components/testimonials";
+
+const formEndpoint = "https://formspree.io/f/mrperdvl";
 
 const services = [
   {
@@ -345,7 +346,9 @@ function Index() {
   const [activeSection, setActiveSection] = useState("");
   const [service, setService] = useState("Website development");
   const [draft, setDraft] = useState("");
-  const [formStatus, setFormStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
+  const [formStatus, setFormStatus] = useState<
+    "idle" | "sending" | "success" | "error" | "rate-limited"
+  >("idle");
   const [servicesPaused, setServicesPaused] = useState(false);
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -397,14 +400,26 @@ function Index() {
     const name = String(data.get("name") || "");
     const email = String(data.get("email") || "");
     const message = String(data.get("message") || "");
-    const website = String(data.get("website") || "");
     const body = `Hi Forthmotive,\n\nI'm ${name}.\nEmail: ${email}\nInterested in: ${service}\n\n${message}\n\nLet's talk.`;
     const url = `mailto:qossainawais@gmail.com?subject=${encodeURIComponent(`New project enquiry — ${service}`)}&body=${encodeURIComponent(body)}`;
     setDraft(url);
     setFormStatus("sending");
+    data.set("service", service);
+    data.set("subject", `New project enquiry — ${service}`);
 
     try {
-      await sendProjectEnquiry({ data: { name, email, service, message, website } });
+      const response = await fetch(formEndpoint, {
+        method: "POST",
+        body: data,
+        headers: { Accept: "application/json" },
+      });
+      if (response.status === 429) {
+        setFormStatus("rate-limited");
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`Form submission failed with status ${response.status}`);
+      }
       setFormStatus("success");
       form.reset();
     } catch (error) {
@@ -743,7 +758,7 @@ function Index() {
               <span className="status-dot" /> REAL CONVERSATIONS. NO PRESSURE.
             </div>
           </div>
-          <form onSubmit={submit} className="contact-form">
+          <form action={formEndpoint} method="POST" onSubmit={submit} className="contact-form">
             <div className="contact-form-head">
               <span>
                 <Sparkles size={16} /> Project enquiry form
@@ -777,7 +792,7 @@ function Index() {
             </div>
             <label className="form-honeypot" aria-hidden="true">
               Website
-              <input name="website" tabIndex={-1} autoComplete="off" />
+              <input name="_gotcha" tabIndex={-1} autoComplete="off" />
             </label>
             <fieldset>
               <legend>I’m interested in...</legend>
@@ -824,17 +839,23 @@ function Index() {
               <ArrowUpRight />
             </Button>
             <p className="form-note">
-              Your enquiry is sent securely to Forthmotive. Prefer email?{" "}
+              We’ll confirm when your enquiry is submitted. Prefer email?{" "}
               <a href={draft || "mailto:qossainawais@gmail.com"}>Open a draft instead.</a>
             </p>
             {formStatus === "success" && (
               <p className="form-status form-status-success" role="status">
-                Thanks — your enquiry has been sent. We’ll reply within 1–2 business days.
+                Thanks — your enquiry has been submitted. We’ll reply within 1–2 business days.
+              </p>
+            )}
+            {formStatus === "rate-limited" && (
+              <p className="form-status form-status-error" role="alert">
+                Too many submissions right now. Please wait a minute and try again, or{" "}
+                <a href={draft}>open your email draft</a>.
               </p>
             )}
             {formStatus === "error" && (
               <p className="form-status form-status-error" role="alert">
-                We couldn’t send that just now. <a href={draft}>Open your email draft</a> so your
+                We couldn’t submit that just now. <a href={draft}>Open your email draft</a> so your
                 message isn’t lost.
               </p>
             )}
